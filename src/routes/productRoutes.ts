@@ -7,9 +7,7 @@ const router = express.Router();
 router.get("/:id", async (req, res) => {
 
   try {
-
     const id = Number(req.params.id);
-
     const product = await Product.findOne({
       _id: id
     });
@@ -37,6 +35,30 @@ router.get("/:id", async (req, res) => {
   } catch (err: any) {
 
     console.log(err);
+
+    res.status(500).json({
+      error: err.message
+    });
+  }
+});
+
+router.put("/:id", async (req, res) => {
+
+  try {
+    const id = Number(req.params.id);
+    const updatedProduct =
+      await Product.findOneAndUpdate(
+        { _id: id },
+        {
+          value: req.body.current_price.value,
+          currency_code:
+            req.body.current_price.currency_code
+        },
+        { new: true }
+      );
+
+    res.json(updatedProduct);
+  } catch (err: any) {
 
     res.status(500).json({
       error: err.message
