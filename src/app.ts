@@ -1,16 +1,27 @@
 import express from "express";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
-import productRoutes from "./routes/productRoutes";
+import routes from "./routes";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
 
-connectDB().catch(console.error);
+function registerMiddleware() {
+  app.use(express.json());
+}
 
-app.use("/products", productRoutes);
+function registerRoutes() {
+  app.use(routes);
+}
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+async function init() {
+  await connectDB();
+  registerMiddleware();
+  registerRoutes();
+
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+init().catch(console.error);
