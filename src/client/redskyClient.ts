@@ -1,14 +1,9 @@
 import axios from "axios";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-const REDSKY_URL = process.env.REDSKY_TARGET_URL!;
-const REDSKY_KEY = process.env.KEY!;
+import { env } from "../config/env";
 
 // Pure HTTP client — only responsibility is fetching data from the Redsky API
 export async function fetchProductTitle(id: string): Promise<string> {
-  const url = `${REDSKY_URL}?key=${REDSKY_KEY}&tcin=${id}`;
+  const url = `${env.REDSKY_TARGET_URL}?key=${env.REDSKY_KEY}&tcin=${id}`;
 
   const { data } = await axios.get(url, {
     headers: {

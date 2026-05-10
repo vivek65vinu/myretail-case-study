@@ -1,9 +1,7 @@
 import express from "express";
-import dotenv from "dotenv";
+import { env } from "./config/env";
 import { connectDB } from "./config/db";
 import routes from "./routes";
-
-dotenv.config();
 
 const app = express();
 
@@ -20,8 +18,7 @@ async function init() {
   registerMiddleware();
   registerRoutes();
 
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(env.PORT, () => console.log(`Server running on port ${env.PORT}`));
 }
 
 init().catch(console.error);
