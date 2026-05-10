@@ -1,10 +1,13 @@
 import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 export async function getProductName(id: string) {
 
   const url =
-    `https://redsky.target.com/redsky_aggregations/v1/redsky/case_study_v1` +
-    `?key=9f36aeafbe60771e321a7cc95a78140772ab3e96` +
+    `${process.env.REDSKY_TARGET_URL}` +
+    `?key=${process.env.KEY}` +
     `&tcin=${id}`;
 
   const response = await axios.get(url, {

@@ -221,7 +221,7 @@ db.product_prices.insertOne({
 ### Start the development server
 
 ```bash
-npm run dev
+npm run start
 ```
 
 Server starts on `http://localhost:8080` with hot reload via `ts-node-dev`.

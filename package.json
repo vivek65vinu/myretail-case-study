@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev src/app.ts"
+    "start": "ts-node-dev src/app.ts"
   },
   "keywords": [],
-  "author": "",
+  "author": "Vivek Jain",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
