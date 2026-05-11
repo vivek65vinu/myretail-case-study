@@ -44,6 +44,7 @@ myRetail is a case study API that solves a common retail pattern: product inform
 ---
 
 ## Architecture
+<img width="1392" height="858" alt="image" src="https://github.com/user-attachments/assets/f666047c-e307-4881-a2a2-e7f7ed62d1fa" />
 
 ```
                         ┌─────────────────┐
