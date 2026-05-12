@@ -38,12 +38,13 @@ myRetail is a case study API that solves a common retail pattern: product inform
 | Framework | Express.js v5 |
 | Database | MongoDB Atlas via Mongoose v9 |
 | HTTP Client | Axios |
-| Testing | Jest + Supertest + ts-jest |
+| Testing | Jest + ts-jest |
 | Dev Server | ts-node-dev (hot reload) |
 
 ---
 
 ## Architecture
+
 <img width="1392" height="858" alt="image" src="https://github.com/user-attachments/assets/f666047c-e307-4881-a2a2-e7f7ed62d1fa" />
 
 ```
@@ -58,6 +59,11 @@ myRetail is a case study API that solves a common retail pattern: product inform
                         └────────┬────────┘
                                  │
                         ┌────────▼────────┐
+                        │  validators/    │  Validates :id and request body
+                        │  validate.ts    │  before reaching the controller
+                        └────────┬────────┘
+                                 │
+                        ┌────────▼────────┐
                         │  routes/        │  Maps URLs to controller functions
                         │  index.ts       │
                         └────────┬────────┘
@@ -68,18 +74,18 @@ myRetail is a case study API that solves a common retail pattern: product inform
                         └────────┬────────┘
                                  │
                         ┌────────▼────────┐
-                        │  services/      │  Business logic — aggregates data
-                        │  productSvc.ts  │  from MongoDB and Redsky API
+                        │  services/      │  Business logic — fires MongoDB +
+                        │  productSvc.ts  │  Redsky calls in parallel, merges result
                         └────┬───────┬────┘
                              │       │
                ┌─────────────▼─┐ ┌───▼──────────────┐
                │  model/       │ │  client/          │
-               │  Product.ts   │ │  redskyClient.ts  │
-               │               │ │                   │
-               │  MongoDB      │ │  Target Redsky    │
-               │  product_     │ │  External API     │
-               │  prices coll. │ └───────────────────┘
-               └───────────────┘
+               │  Product.ts   │ │  db.ts            │
+               │               │ │  redskyClient.ts  │
+               │  MongoDB      │ │                   │
+               │  product_     │ │  MongoDB + Redsky │
+               │  prices coll. │ │  as clients       │
+               └───────────────┘ └───────────────────┘
 ```
 
 ---
@@ -90,59 +96,78 @@ Each layer has a single responsibility. No layer skips another — requests alwa
 
 | Layer | File | Responsibility | Knows About |
 |---|---|---|---|
+| **Validators** | `validators/validate.ts` | Reject invalid input before it hits business logic | Express req/res |
 | **Routes** | `routes/index.ts` | Register all routers in one place | Express Router |
-| **Routes** | `routes/productRoutes.ts` | Map HTTP verb + URL to controller | Controller |
+| **Routes** | `routes/productRoutes.ts` | Map HTTP verb + URL → validator → controller | Controller, Validators |
 | **Controller** | `controllers/productController.ts` | Parse req, call service, send res | HTTP (req/res) |
-| **Service** | `services/productService.ts` | Business logic, data aggregation | Model + Client |
-| **Client** | `client/redskyClient.ts` | Pure HTTP call to Redsky API | Axios, env vars |
+| **Service** | `services/productService.ts` | Business logic — parallel data fetch + mapping | Model + Client |
+| **Client** | `client/redskyClient.ts` | Pure HTTP call to Redsky, returns raw data | Axios, env vars |
+| **Client** | `client/db.ts` | MongoDB connection (treated as a client) | Mongoose, env vars |
 | **Model** | `model/Product.ts` | MongoDB schema definition | Mongoose |
-| **Config** | `config/db.ts` | MongoDB connection | Mongoose, env vars |
 
 ### Key Design Decisions
 
-- **Layered architecture** — each layer only talks to the one directly below it, making individual layers easy to test, swap, or scale independently.
-- **Custom `_id`** — MongoDB documents use the product's numeric ID as `_id` (instead of ObjectId), so lookups are direct key fetches with no extra index.
-- **Aggregation in the service layer** — merging price (MongoDB) and name (Redsky) happens in `productService`, keeping the controller thin and the business logic in one testable place.
-- **Pure HTTP client** — `redskyClient.ts` only makes the API call and returns data. No business logic, no DB calls — easy to mock in tests.
+- **Validators as a dedicated layer** — input is rejected with a `400` before it ever reaches the controller or service, keeping business logic clean.
+- **MongoDB treated as a client** — `db.ts` lives in `client/` alongside `redskyClient.ts` because both are external systems the app connects to.
+- **Parallel data fetching** — MongoDB and Redsky API calls fire simultaneously via `Promise.all`, cutting GET response time roughly in half.
+- **Pure HTTP client** — `redskyClient.ts` only transports data. All response mapping lives in the service layer where it can be tested independently.
+- **Custom `_id`** — MongoDB documents use the product's numeric ID as `_id`, so lookups are direct key fetches with no extra index.
 
 ---
 
 ## Data Flow
 
-### GET /products/:id — Fetch product with price
+### GET /products/:id
 
 ```
-Request  →  Router  →  productController.getProduct()
-                              │
-                              ▼
-                       productService.getProductById(id)
-                              │
-                    ┌─────────┴──────────┐
-                    ▼                    ▼
-             MongoDB lookup        Redsky API call
-             product_prices        fetchProductTitle(id)
-                    │                    │
-                    └─────────┬──────────┘
-                              ▼
-                    Merge → { id, name, current_price }
-                              │
-                              ▼
-                         200 JSON Response
+Request
+  │
+  ▼
+validateId        ← 400 if id is not a positive integer
+  │
+  ▼
+productController.getProduct()
+  │
+  ▼
+productService.getProductById(id)
+  │
+  ├── Promise.all ──────────────────────────────┐
+  │         │                                   │
+  ▼         ▼                                   ▼
+MongoDB lookup                         Redsky API call
+product_prices                         fetchProductData(id)
+  │                                             │
+  └──────────────── merge ──────────────────────┘
+                      │
+                      ▼
+        { id, name, current_price }
+                      │
+                      ▼
+               200 JSON Response
 ```
 
-### PUT /products/:id — Update product price
+### PUT /products/:id
 
 ```
-Request  →  Router  →  productController.updateProduct()
-                              │
-                              ▼
-                       productService.updateProductPrice(id, value, currency_code)
-                              │
-                              ▼
-                       MongoDB findOneAndUpdate()
-                              │
-                              ▼
-                         200 Updated Document
+Request
+  │
+  ▼
+validateId          ← 400 if id is not a positive integer
+  │
+  ▼
+validateUpdateBody  ← 400 if price or currency_code is missing/invalid
+  │
+  ▼
+productController.updateProduct()
+  │
+  ▼
+productService.updateProductPrice(id, price, currency_code)
+  │
+  ▼
+MongoDB findOneAndUpdate()
+  │
+  ▼
+200 Updated Document
 ```
 
 ---
@@ -174,8 +199,9 @@ GET /products/13860428
 
 | Status | Condition |
 |---|---|
-| `404` | Product ID not found in MongoDB |
-| `500` | Unexpected server error (e.g. Redsky API failure) |
+| `400` | `id` is not a positive integer |
+| `404` | Product not found in MongoDB |
+| `500` | Unexpected server error |
 
 ---
 
@@ -189,10 +215,8 @@ PUT /products/13860428
 Content-Type: application/json
 
 {
-  "current_price": {
-    "value": 15.99,
-    "currency_code": "USD"
-  }
+  "price": 15.99,
+  "currency_code": "USD"
 }
 ```
 
@@ -205,6 +229,15 @@ Content-Type: application/json
 }
 ```
 
+**Error responses:**
+
+| Status | Condition |
+|---|---|
+| `400` | `id` is not a positive integer |
+| `400` | `price` is missing, not a number, or not positive |
+| `400` | `currency_code` is missing or empty |
+| `500` | Unexpected server error |
+
 ---
 
 ## Project Structure
@@ -212,20 +245,21 @@ Content-Type: application/json
 ```
 Case_Study_MyRetail/
 ├── src/
-│   ├── app.ts                          # Entry point — env, middleware, routes, server
-│   ├── config/
-│   │   └── db.ts                       # MongoDB Atlas connection
-│   ├── routes/
-│   │   ├── index.ts                    # Registers all route modules
-│   │   └── productRoutes.ts            # Maps /products/:id to controller functions
+│   ├── app.ts                          # Entry point — loads env, connects DB, starts server
+│   ├── client/
+│   │   ├── db.ts                       # MongoDB connection (treated as a client)
+│   │   └── redskyClient.ts             # Pure HTTP client for Target's Redsky API
 │   ├── controllers/
 │   │   └── productController.ts        # Handles HTTP req/res, delegates to service
+│   ├── model/
+│   │   └── Product.ts                  # Mongoose schema for product_prices collection
+│   ├── routes/
+│   │   ├── index.ts                    # Registers all route modules
+│   │   └── productRoutes.ts            # Wires validators + controller to routes
 │   ├── services/
-│   │   └── productService.ts           # Business logic — aggregates price + name
-│   ├── client/
-│   │   └── redskyClient.ts             # Pure HTTP client for Target's Redsky API
-│   └── model/
-│       └── Product.ts                  # Mongoose schema for product_prices collection
+│   │   └── productService.ts           # Business logic — parallel fetch + data mapping
+│   └── validators/
+│       └── validate.ts                 # Input validation for :id and request body
 ├── .env.example                        # Template for required environment variables
 ├── tsconfig.json                       # TypeScript config (strict, ES2020, commonjs)
 └── package.json
@@ -294,4 +328,11 @@ Server starts on `http://localhost:8080` with hot reload via `ts-node-dev`.
 npm test
 ```
 
-Tests use **Jest** with **Supertest** for HTTP-level integration tests and **ts-jest** to run TypeScript directly without a separate compile step.
+29 tests across 4 suites — every layer tested in isolation with mocks.
+
+| Suite | What it tests |
+|---|---|
+| `validators/validate.test.ts` | Invalid id, missing/bad price, missing currency_code |
+| `client/redskyClient.test.ts` | Raw HTTP call, URL construction, axios error propagation |
+| `services/productService.test.ts` | Parallel fetch, data mapping, null product, error propagation |
+| `controllers/productController.test.ts` | 200/404/500 responses, correct service delegation |

@@ -1,13 +1,17 @@
 import { getProductById, updateProductPrice } from "./productService";
 import Product from "../model/Product";
-import { fetchProductTitle } from "../client/redskyClient";
+import { fetchProductData } from "../client/redskyClient";
 
 // Mock the DB model and external client — service logic is what we're testing
 jest.mock("../model/Product");
 jest.mock("../client/redskyClient");
 
 const mockedProduct = Product as jest.Mocked<typeof Product>;
-const mockedFetchTitle = fetchProductTitle as jest.MockedFunction<typeof fetchProductTitle>;
+const mockedFetchData = fetchProductData as jest.MockedFunction<typeof fetchProductData>;
+
+const redskyResponse = (title: string) => ({
+  data: { product: { item: { product_description: { title } } } }
+});
 
 describe("productService", () => {
 
@@ -19,20 +23,18 @@ describe("productService", () => {
 
     it("returns null when the product is not found in MongoDB", async () => {
       mockedProduct.findOne.mockResolvedValue(null);
+      mockedFetchData.mockResolvedValue(redskyResponse("Some Title"));
 
       const result = await getProductById(13860428);
 
       expect(result).toBeNull();
-      expect(mockedFetchTitle).not.toHaveBeenCalled(); // no Redsky call if DB misses
     });
 
     it("returns the aggregated product with name and price when found", async () => {
       mockedProduct.findOne.mockResolvedValue({
-        _id: 13860428,
-        value: 13.49,
-        currency_code: "USD"
+        _id: 13860428, value: 13.49, currency_code: "USD"
       } as any);
-      mockedFetchTitle.mockResolvedValue("The Big Lebowski (Blu-ray)");
+      mockedFetchData.mockResolvedValue(redskyResponse("The Big Lebowski (Blu-ray)"));
 
       const result = await getProductById(13860428);
 
@@ -43,22 +45,46 @@ describe("productService", () => {
       });
     });
 
-    it("calls fetchProductTitle with the product id as a string", async () => {
+    it("falls back to buy_url when title is missing in Redsky response", async () => {
       mockedProduct.findOne.mockResolvedValue({
         _id: 13860428, value: 13.49, currency_code: "USD"
       } as any);
-      mockedFetchTitle.mockResolvedValue("Some Title");
+      mockedFetchData.mockResolvedValue({
+        data: { product: { item: { enrichment: { buy_url: "https://target.com/p/A-13860428" } } } }
+      });
+
+      const result = await getProductById(13860428);
+
+      expect(result?.name).toBe("https://target.com/p/A-13860428");
+    });
+
+    it("uses placeholder name when Redsky response has no title or buy_url", async () => {
+      mockedProduct.findOne.mockResolvedValue({
+        _id: 13860428, value: 13.49, currency_code: "USD"
+      } as any);
+      mockedFetchData.mockResolvedValue({ data: { product: { item: {} } } });
+
+      const result = await getProductById(13860428);
+
+      expect(result?.name).toBe("Product Name Not Found");
+    });
+
+    it("calls fetchProductData with the product id as a string", async () => {
+      mockedProduct.findOne.mockResolvedValue({
+        _id: 13860428, value: 13.49, currency_code: "USD"
+      } as any);
+      mockedFetchData.mockResolvedValue(redskyResponse("Some Title"));
 
       await getProductById(13860428);
 
-      expect(mockedFetchTitle).toHaveBeenCalledWith("13860428");
+      expect(mockedFetchData).toHaveBeenCalledWith("13860428");
     });
 
     it("propagates error when Redsky API call fails", async () => {
       mockedProduct.findOne.mockResolvedValue({
         _id: 13860428, value: 13.49, currency_code: "USD"
       } as any);
-      mockedFetchTitle.mockRejectedValue(new Error("Redsky API down"));
+      mockedFetchData.mockRejectedValue(new Error("Redsky API down"));
 
       await expect(getProductById(13860428)).rejects.toThrow("Redsky API down");
     });

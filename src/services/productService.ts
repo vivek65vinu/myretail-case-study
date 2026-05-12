@@ -1,5 +1,5 @@
 import Product, { IProduct } from "../model/Product";
-import { fetchProductTitle } from "../client/redskyClient";
+import { fetchProductData } from "../client/redskyClient";
 
 // Shape of the aggregated response returned to the client
 export interface ProductResponse {
@@ -13,31 +13,37 @@ export interface ProductResponse {
 
 // Business logic layer — orchestrates data from MongoDB and the Redsky API
 
-export async function getProductById(id: number): Promise<ProductResponse | null> {
-  const product = await Product.findOne({ _id: id });
+const extractProductName = (data: any): string =>
+  data?.data?.product?.item?.product_description?.title ||
+  data?.data?.product?.item?.enrichment?.buy_url ||
+  "Product Name Not Found";
+
+export const getProductById = async (id: number): Promise<ProductResponse | null> => {
+  // Fire both calls at the same time instead of waiting for MongoDB before calling Redsky
+  const [product, redskyData] = await Promise.all([
+    Product.findOne({ _id: id }),
+    fetchProductData(String(id))
+  ]);
 
   if (!product) return null;
 
-  const name = await fetchProductTitle(String(id));
-
   return {
     id,
-    name,
+    name: extractProductName(redskyData),
     current_price: {
       value: product.value,
       currency_code: product.currency_code
     }
   };
-}
+};
 
-export async function updateProductPrice(
+export const updateProductPrice = async (
   id: number,
-  value: number,
+  price: number,
   currency_code: string
-): Promise<IProduct | null> {
-  return Product.findOneAndUpdate(
+): Promise<IProduct | null> =>
+  Product.findOneAndUpdate(
     { _id: id },
-    { value, currency_code },
+    { value: price, currency_code },
     { new: true } // return the updated document, not the original
   );
-}

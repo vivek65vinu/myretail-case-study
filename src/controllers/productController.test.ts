@@ -80,7 +80,7 @@ describe("productController", () => {
 
       const req = mockReq(
         { id: "13860428" },
-        { current_price: { value: 15.99, currency_code: "USD" } }
+        { price: 15.99, currency_code: "USD" }
       );
       const res = mockRes();
 
@@ -95,7 +95,7 @@ describe("productController", () => {
 
       const req = mockReq(
         { id: "13860428" },
-        { current_price: { value: 15.99, currency_code: "USD" } }
+        { price: 15.99, currency_code: "USD" }
       );
       const res = mockRes();
 

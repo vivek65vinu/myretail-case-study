@@ -1,73 +1,36 @@
 import axios from "axios";
-import { fetchProductTitle } from "./redskyClient";
+import { fetchProductData } from "./redskyClient";
 
 // Mock axios so no real HTTP calls are made
 jest.mock("axios");
 
-// Mock env config so tests don't require a .env file
-jest.mock("../config/env", () => ({
-  env: {
-    REDSKY_TARGET_URL: "https://redsky.example.com",
-    REDSKY_KEY: "test-key"
-  }
-}));
+// Set env vars directly so tests don't require a .env file
+process.env.REDSKY_TARGET_URL = "https://redsky.example.com";
+process.env.KEY = "test-key";
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-describe("redskyClient — fetchProductTitle", () => {
+const mockRedskyResponse = (item: object) => ({
+  data: { data: { product: { item } } }
+});
+
+describe("redskyClient — fetchProductData", () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  it("returns the product title when present in the API response", async () => {
-    mockedAxios.get.mockResolvedValue({
-      data: {
-        data: {
-          product: {
-            item: {
-              product_description: { title: "The Big Lebowski (Blu-ray)" }
-            }
-          }
-        }
-      }
-    });
+  it("returns raw data from the Redsky API", async () => {
+    const item = { product_description: { title: "The Big Lebowski (Blu-ray)" } };
+    mockedAxios.get.mockResolvedValue(mockRedskyResponse(item));
 
-    const title = await fetchProductTitle("13860428");
-    expect(title).toBe("The Big Lebowski (Blu-ray)");
-  });
+    const data = await fetchProductData("13860428");
 
-  it("falls back to buy_url when product title is missing", async () => {
-    mockedAxios.get.mockResolvedValue({
-      data: {
-        data: {
-          product: {
-            item: {
-              product_description: {},
-              enrichment: { buy_url: "https://www.target.com/p/-/A-13860428" }
-            }
-          }
-        }
-      }
-    });
-
-    const title = await fetchProductTitle("13860428");
-    expect(title).toBe("https://www.target.com/p/-/A-13860428");
-  });
-
-  it("returns placeholder string when both title and buy_url are missing", async () => {
-    mockedAxios.get.mockResolvedValue({
-      data: { data: { product: { item: {} } } }
-    });
-
-    const title = await fetchProductTitle("13860428");
-    expect(title).toBe("Product Name Not Found");
+    expect(data).toEqual(mockRedskyResponse(item).data);
   });
 
   it("builds the correct request URL with product id and api key", async () => {
-    mockedAxios.get.mockResolvedValue({
-      data: { data: { product: { item: { product_description: { title: "Test" } } } } }
-    });
+    mockedAxios.get.mockResolvedValue(mockRedskyResponse({}));
 
-    await fetchProductTitle("13860428");
+    await fetchProductData("13860428");
 
     expect(mockedAxios.get).toHaveBeenCalledWith(
       "https://redsky.example.com?key=test-key&tcin=13860428",
@@ -78,6 +41,6 @@ describe("redskyClient — fetchProductTitle", () => {
   it("throws when the axios call fails", async () => {
     mockedAxios.get.mockRejectedValue(new Error("Network Error"));
 
-    await expect(fetchProductTitle("13860428")).rejects.toThrow("Network Error");
+    await expect(fetchProductData("13860428")).rejects.toThrow("Network Error");
   });
 });

@@ -3,7 +3,7 @@ import * as productService from "../services/productService";
 
 // Controller layer — handles HTTP req/res and delegates all logic to the service
 
-export async function getProduct(req: Request, res: Response) {
+export const getProduct = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const product = await productService.getProductById(id);
@@ -16,16 +16,16 @@ export async function getProduct(req: Request, res: Response) {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-}
+};
 
-export async function updateProduct(req: Request, res: Response) {
+export const updateProduct = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    const { value, currency_code } = req.body.current_price;
+    const { price, currency_code } = req.body;
 
-    const updated = await productService.updateProductPrice(id, value, currency_code);
+    const updated = await productService.updateProductPrice(id, price, currency_code);
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-}
+};
