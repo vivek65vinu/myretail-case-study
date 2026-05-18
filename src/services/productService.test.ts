@@ -88,6 +88,13 @@ describe("productService", () => {
 
       await expect(getProductById(13860428)).rejects.toThrow("Redsky API down");
     });
+
+    it("propagates error when MongoDB findOne throws", async () => {
+      mockedProduct.findOne.mockRejectedValue(new Error("DB connection lost"));
+      mockedFetchData.mockResolvedValue(redskyResponse("Some Title"));
+
+      await expect(getProductById(13860428)).rejects.toThrow("DB connection lost");
+    });
   });
 
   // ─── updateProductPrice ───────────────────────────────────────────────────
@@ -122,6 +129,12 @@ describe("productService", () => {
       const result = await updateProductPrice(99999, 10, "USD");
 
       expect(result).toBeNull();
+    });
+
+    it("propagates error when MongoDB findOneAndUpdate throws", async () => {
+      mockedProduct.findOneAndUpdate.mockRejectedValue(new Error("Write failed"));
+
+      await expect(updateProductPrice(13860428, 15.99, "USD")).rejects.toThrow("Write failed");
     });
   });
 });

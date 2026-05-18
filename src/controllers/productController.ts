@@ -24,6 +24,11 @@ export const updateProduct = async (req: Request, res: Response) => {
     const { price, currency_code } = req.body;
 
     const updated = await productService.updateProductPrice(id, price, currency_code);
+
+    if (!updated) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

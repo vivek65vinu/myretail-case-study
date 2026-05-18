@@ -90,6 +90,21 @@ describe("productController", () => {
       expect(res.json).toHaveBeenCalledWith(updated);
     });
 
+    it("returns 404 when the product does not exist", async () => {
+      mockedService.updateProductPrice.mockResolvedValue(null);
+
+      const req = mockReq(
+        { id: "99999" },
+        { price: 15.99, currency_code: "USD" }
+      );
+      const res = mockRes();
+
+      await updateProduct(req as Request, res as Response);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Product not found" });
+    });
+
     it("returns 500 when the service throws an unexpected error", async () => {
       mockedService.updateProductPrice.mockRejectedValue(new Error("Write failed"));
 
